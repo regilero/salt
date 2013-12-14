@@ -94,6 +94,8 @@ class MySQLTestCase(TestCase):
                     }
                 ),
                 call().cursor().execute('FLUSH PRIVILEGES;'),
+                call().cursor().close(),
+                call().close()
             )
             connect_mock.assert_has_calls(calls, any_order=True)
 
@@ -249,7 +251,16 @@ class MySQLTestCase(TestCase):
         with patch.dict(mysql.__salt__, {'config.option': MagicMock()}):
             function(*args, **kwargs)
             if isinstance(expected_sql, dict):
-                calls = (call().cursor().execute('{0}'.format(expected_sql['sql']), expected_sql['sql_args']))
+                calls = [
+                    call().cursor().execute(
+                        '{0}'.format(expected_sql['sql']),
+                        expected_sql['sql_args']
+                    )
+                ]
             else:
-                calls = (call().cursor().execute('{0}'.format(expected_sql)))
-            connect_mock.assert_has_calls(calls)
+                calls = [call().cursor().execute('{0}'.format(expected_sql))]
+            # ensure all functions are closing cursors
+            calls.append(call().cursor().close())
+            # ensure all functions are closing MySQL connections (leaks!)
+            calls.append(call().close())
+            connect_mock.assert_has_calls(calls, any_order=True)
